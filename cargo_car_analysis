@@ -1,0 +1,122 @@
+from google.colab import drive
+import os
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# 檢查各區分隊路線配車調查所填資料，與原始資料無誤。
+# 程式邏輯: 1.讀取各區分隊路線配車調查各區隊檔案，擷取(垃圾、資收、廚餘)及外掛車(第四台)所填寫局編，刪除空白項及同資收收運、同垃圾收運內容，合併全部填寫局編成一column，返回Series。
+#     : 2.讀取各區隊上報車輛管轄原始資料，擷取局編欄位，與上function返回之Series逐筆校隊，如Series的值在原始資料查無，即表示資料不一致，打印出不一致的值(Series內)，逐筆校對。
+# 測試結果: 已全數校對完畢，資料無誤。
+
+def datacleaning(x):
+
+  root1 = '/content/drive/My Drive/2024人工智慧學習/專案-車輛調度系統/車輛資料'
+  drive.mount("/content/drive/")
+  os.chdir(root1)
+  os.listdir()
+
+  route_analysis_r = pd.read_excel('各區分隊路線配車調查副本.xlsx', sheet_name=x)
+  route_analysis_r
+  route_analysis = route_analysis_r.copy()
+  route_analysis = route_analysis[4:]
+  route_analysis
+
+  car_number_1 = route_analysis["局編1"]
+  car_number_2 = route_analysis["局編2"]
+  car_number_3 = route_analysis["局編3"]
+  car_number_4 = route_analysis["多配車局編"]
+
+  #car_number_1
+
+  total_number = pd.concat([car_number_1, car_number_2, car_number_3, car_number_4], axis=0, ignore_index = True)
+  #total_number
+  #total_number[30]
+
+  del_list = []
+  total_number.dropna(inplace=True)
+  total_number.reset_index(drop=True, inplace=True)
+  #total_number
+
+  for i in range(len(total_number)):
+    if total_number[i] == "同資收收運":
+      del_list.append(i)
+    if total_number[i] == "同垃圾收運":
+      del_list.append(i)
+
+  total_number.drop(del_list, axis=0, inplace=True)
+  total_number.reset_index(drop=True, inplace=True)
+  #total_number
+
+  return route_analysis, total_number
+
+def data_analysis(x, y):
+
+  root2 = '/content/drive/My Drive/2024人工智慧學習/專案-車輛調度系統/車輛資料/車輛管轄調查/(2)區隊上報資料'
+  drive.mount("/content/drive/")
+  root_ch2 = os.chdir(root2)
+  os.listdir()
+
+  raw_data = pd.read_excel('{}.xlsx'.format(x))
+  #print(raw_data)
+
+  original_car_number = raw_data["局編號"]
+  number_values = original_car_number.values
+  print("{}區全部局編:".format(x), number_values)
+  print("--------------------------------------------------")
+
+  for i in y:
+    if i not in original_car_number.values:
+      print(i)
+    else:
+      print("校對完畢，資料無誤。")
+
+# 查看各區隊各類型車種使用數量及備用車數量，鎖定卡車及大型資源回收車，扣除分隊數，輸出可借用之大型資收車總數
+
+def car_res_list(x, y, z):
+
+  root3 = '/content/drive/My Drive/2024人工智慧學習/專案-車輛調度系統/車輛資料/車輛管轄調查/(2)區隊上報資料'
+  drive.mount("/content/drive/")
+  root_ch2 = os.chdir(root3)
+  os.listdir()
+
+  raw_data = pd.read_excel('{}.xlsx'.format(x))
+  raw_data_c = raw_data.copy()
+  del_list = []
+  for dot in y:
+    del_car = raw_data_c[raw_data_c["局編號"] == dot]
+    for i in del_car.index:
+      del_list.append(i)
+
+  raw_data_c.drop(del_list, axis=0, inplace=True)
+  raw_data_c.reset_index(drop=True, inplace=True)
+
+  sections = z["分隊"].unique()
+
+
+
+  car_series = raw_data_c.groupby("預算書車種").size()
+  car_series = pd.DataFrame(car_series)
+  car_series.rename(columns={0:"備用數量"}, inplace=True)
+  #print(x+"區原始資料:",car_series)
+  #print("分隊數(扣除預留車參考):",len(sections))
+  if "卡車" and "大型資源回收車" in car_series.index:
+    Recomend_q = car_series.loc["卡車","備用數量"]+ car_series.loc["大型資源回收車","備用數量"] - len(sections)
+  if "卡車"  in car_series.index and "大型資源回收車" not in car_series.index:
+    Recomend_q = car_series.loc["卡車","備用數量"] - len(sections)
+  if "卡車" not in car_series.index and "大型資源回收車" in car_series.index:
+    Recomend_q = car_series.loc["大型資源回收車","備用數量"] - len(sections)
+  if "卡車" not in car_series.index and "大型資源回收車" not in car_series.index:
+    Recomend_q = 0
+  #print(x+"區可借出之卡車及大資車數量:",Recomend_q)
+
+  return x+"可借出之卡車及大資車數量:"+str(Recomend_q)
+
+# 執行程式檔
+
+unit = ["士林", "北投", "大同", "中山", "松山", "內湖", "中正", "萬華", "南港", "信義", "大安", "文山"]
+for i in unit:
+  district = datacleaning(i+"區")
+  #data_analysis(i, district[1])
+  print(car_res_list(i ,district[1], district[0]))
